@@ -9,7 +9,7 @@ pipeline {
         DATASTORE = "CITServer-Internal-2"
         RESOURCE_POOL = "/ClusterCIT"
         VM_FOLDER = "/Senior Project Machines"
-        SSH_CREDENTIALS = SSH_CREDENTIALS = credentials('gns3-credentials')  // Use stored Jenkins credentials
+        SSH_CREDENTIALS = credentials('gns3-credentials')  // Use stored Jenkins credentials
     }
 
     stages {
