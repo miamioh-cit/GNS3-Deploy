@@ -16,14 +16,30 @@ pipeline {
             steps {
                 script {
                     sh """
-                    if ! command -v $GOVC_PATH &> /dev/null; then
+                    if [ ! -f "$GOVC_PATH" ]; then
                         echo "govc not found, installing..."
                         curl -L https://github.com/vmware/govmomi/releases/latest/download/govc_Linux_x86_64.tar.gz -o govc.tar.gz
                         tar -xzf govc.tar.gz
                         chmod +x govc
-                        mv govc $GOVC_PATH  # Move govc to Jenkins workspace
+                        mv govc $GOVC_PATH
                         rm govc.tar.gz
+                    else
+                        echo "govc is already installed."
                     fi
+                    """
+                }
+            }
+        }
+
+        stage('Verify govc Installation') {
+            steps {
+                script {
+                    sh """
+                    echo "Checking govc version..."
+                    $GOVC_PATH version || {
+                        echo "ERROR: govc is not executable!"
+                        exit 1
+                    }
                     """
                 }
             }
