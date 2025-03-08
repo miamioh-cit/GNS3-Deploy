@@ -3,32 +3,49 @@ pipeline {
 
     environment {
         VSPHERE_HOST = "vcenter.regional.miamioh.edu"
-        VSPHERE_USER = credentials('ServiceUser')  // vSphere credentials stored in Jenkins
         VM_SOURCE = "gns3-main"
         NEW_VM_NAME = "gns3-clone-${BUILD_ID}"  // Unique name using Jenkins build ID
         DATASTORE = "CITServer-Internal-2"
         RESOURCE_POOL = "/ClusterCIT"
         VM_FOLDER = "/Senior Project Machines"
-        SSH_CREDENTIALS = credentials('gns3')  // Use stored Jenkins credentials
     }
 
     stages {
-        stage('Clone VM from Running Machine') {
+        stage('Ensure govc Installed') {
             steps {
                 script {
                     sh """
-                    govc vm.clone -vm $VM_SOURCE -ds $DATASTORE -folder $VM_FOLDER -pool $RESOURCE_POOL -on=false -name $NEW_VM_NAME
+                    if ! command -v govc &> /dev/null; then
+                        echo "govc not found, installing..."
+                        curl -L https://github.com/vmware/govmomi/releases/latest/download/govc_Linux_x86_64.tar.gz | tar -xz -C /usr/local/bin
+                        chmod +x /usr/local/bin/govc
+                    fi
                     """
+                }
+            }
+        }
+
+        stage('Clone VM from Running Machine') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'vsphere-credentials', usernameVariable: 'VSPHERE_USER', passwordVariable: 'VSPHERE_PASS')]) {
+                    script {
+                        sh """
+                        govc vm.clone -vm $VM_SOURCE -ds $DATASTORE -folder $VM_FOLDER -pool $RESOURCE_POOL -on=false -name $NEW_VM_NAME \
+                        -u "$VSPHERE_USER:$VSPHERE_PASS@$VSPHERE_HOST"
+                        """
+                    }
                 }
             }
         }
 
         stage('Power On Cloned VM') {
             steps {
-                script {
-                    sh """
-                    govc vm.power -on $NEW_VM_NAME
-                    """
+                withCredentials([usernamePassword(credentialsId: 'vsphere-credentials', usernameVariable: 'VSPHERE_USER', passwordVariable: 'VSPHERE_PASS')]) {
+                    script {
+                        sh """
+                        govc vm.power -on $NEW_VM_NAME -u "$VSPHERE_USER:$VSPHERE_PASS@$VSPHERE_HOST"
+                        """
+                    }
                 }
             }
         }
@@ -37,29 +54,7 @@ pipeline {
             steps {
                 script {
                     echo "Waiting for VM to become reachable..."
-                    sh "sleep 60"  // Adjust this as needed based on VM boot time
-                }
-            }
-        }
-
-        stage('Start GNS3 on Cloned VM') {
-            steps {
-                script {
-                    def sshUser = SSH_CREDENTIALS.split(":")[0]
-                    def sshPass = SSH_CREDENTIALS.split(":")[1]
-                    sh """
-                    sshpass -p '${sshPass}' ssh -o StrictHostKeyChecking=no ${sshUser}@$NEW_VM_NAME 'sudo systemctl start gns3server'
-                    """
-                }
-            }
-        }
-
-        stage('Verify GNS3 API is Running') {
-            steps {
-                script {
-                    sh """
-                    curl --silent --fail http://$NEW_VM_NAME:3080/v2/version || exit 1
-                    """
+                    sh "sleep 60"
                 }
             }
         }
