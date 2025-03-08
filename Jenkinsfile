@@ -8,34 +8,39 @@ pipeline {
         DATASTORE = "CITServer-Internal-2"
         RESOURCE_POOL = "/ClusterCIT"
         VM_FOLDER = "/Senior Project Machines"
+        GOVC_PATH = "${WORKSPACE}/govc"  // Store govc in Jenkins workspace
     }
 
     stages {
-    stage('Ensure govc Installed') {
-        steps {
-            script {
-                sh """
-                if ! command -v govc &> /dev/null; then
-                echo "govc not found, installing..."
-                curl -L https://github.com/vmware/govmomi/releases/latest/download/govc_Linux_x86_64.tar.gz -o govc.tar.gz
-                tar -xzf govc.tar.gz
-                chmod +x govc
-                sudo mv govc /usr/local/bin/govc
-                rm govc.tar.gz
-            fi
-            """
+        stage('Ensure govc Installed') {
+            steps {
+                script {
+                    sh """
+                    if ! command -v $GOVC_PATH &> /dev/null; then
+                        echo "govc not found, installing..."
+                        curl -L https://github.com/vmware/govmomi/releases/latest/download/govc_Linux_x86_64.tar.gz -o govc.tar.gz
+                        tar -xzf govc.tar.gz
+                        chmod +x govc
+                        mv govc $GOVC_PATH  # Move govc to Jenkins workspace
+                        rm govc.tar.gz
+                    fi
+                    """
+                }
+            }
         }
-    }
-}
-
 
         stage('Clone VM from Running Machine') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'vsphere-credentials', usernameVariable: 'VSPHERE_USER', passwordVariable: 'VSPHERE_PASS')]) {
                     script {
                         sh """
-                        govc vm.clone -vm $VM_SOURCE -ds $DATASTORE -folder $VM_FOLDER -pool $RESOURCE_POOL -on=false -name $NEW_VM_NAME \
-                        -u "$VSPHERE_USER:$VSPHERE_PASS@$VSPHERE_HOST"
+                        export GOVC_URL="https://$VSPHERE_USER:$VSPHERE_PASS@$VSPHERE_HOST"
+                        export GOVC_INSECURE=1
+                        echo "Cloning VM..."
+                        $GOVC_PATH vm.clone -vm $VM_SOURCE -ds $DATASTORE -folder $VM_FOLDER -pool $RESOURCE_POOL -on=false -name $NEW_VM_NAME || {
+                            echo "ERROR: VM Clone failed!"
+                            exit 1
+                        }
                         """
                     }
                 }
@@ -47,7 +52,13 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'vsphere-credentials', usernameVariable: 'VSPHERE_USER', passwordVariable: 'VSPHERE_PASS')]) {
                     script {
                         sh """
-                        govc vm.power -on $NEW_VM_NAME -u "$VSPHERE_USER:$VSPHERE_PASS@$VSPHERE_HOST"
+                        export GOVC_URL="https://$VSPHERE_USER:$VSPHERE_PASS@$VSPHERE_HOST"
+                        export GOVC_INSECURE=1
+                        echo "Powering on VM..."
+                        $GOVC_PATH vm.power -on $NEW_VM_NAME || {
+                            echo "ERROR: Powering on VM failed!"
+                            exit 1
+                        }
                         """
                     }
                 }
@@ -66,10 +77,10 @@ pipeline {
 
     post {
         success {
-            echo "GNS3 VM deployment successful: $NEW_VM_NAME"
+            echo "✅ GNS3 VM deployment successful: $NEW_VM_NAME"
         }
         failure {
-            echo "Failed to deploy GNS3 VM."
+            echo "❌ Failed to deploy GNS3 VM."
         }
     }
 }
