@@ -11,19 +11,23 @@ pipeline {
     }
 
     stages {
-        stage('Ensure govc Installed') {
-            steps {
-                script {
-                    sh """
-                    if ! command -v govc &> /dev/null; then
-                        echo "govc not found, installing..."
-                        curl -L https://github.com/vmware/govmomi/releases/latest/download/govc_Linux_x86_64.tar.gz | tar -xz -C /usr/local/bin
-                        chmod +x /usr/local/bin/govc
-                    fi
-                    """
-                }
-            }
+    stage('Ensure govc Installed') {
+        steps {
+            script {
+                sh """
+                if ! command -v govc &> /dev/null; then
+                echo "govc not found, installing..."
+                curl -L https://github.com/vmware/govmomi/releases/latest/download/govc_Linux_x86_64.tar.gz -o govc.tar.gz
+                tar -xzf govc.tar.gz
+                chmod +x govc
+                sudo mv govc /usr/local/bin/govc
+                rm govc.tar.gz
+            fi
+            """
         }
+    }
+}
+
 
         stage('Clone VM from Running Machine') {
             steps {
