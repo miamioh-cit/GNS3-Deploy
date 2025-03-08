@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         VSPHERE_HOST = "vcenter.regional.miamioh.edu"
-        VSPHERE_USER = ServiceUser('vsphere-credentials')  // vSphere credentials stored in Jenkins
+        VSPHERE_USER = credentials('ServiceUser')  // vSphere credentials stored in Jenkins
         VM_SOURCE = "gns3-main"
         NEW_VM_NAME = "gns3-clone-${BUILD_ID}"  // Unique name using Jenkins build ID
         DATASTORE = "CITServer-Internal-2"
