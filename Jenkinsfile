@@ -4,7 +4,7 @@ pipeline {
     environment {
         VSPHERE_HOST = "vcenter.regional.miamioh.edu"
         VM_SOURCE = "gns3-main"
-        NEW_VM_NAME = "gns3-clone-${BUILD_ID}"  // Unique name using Jenkins build ID
+        NEW_VM_NAME = "gns3-clone-${BUILD_ID}"
         DATASTORE = "CITServer-Internal-2"
         RESOURCE_POOL = "/ClusterCIT"
         VM_FOLDER = "/Senior Project Machines"
@@ -22,36 +22,12 @@ pipeline {
             }
         }
 
-        stage('Connect to vSphere') {
+        stage('Clone & Deploy VM') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'vsphere-credentials', usernameVariable: 'VSPHERE_USER', passwordVariable: 'VSPHERE_PASS')]) {
                     script {
                         sh """
-                        pwsh -c "Connect-VIServer -Server $VSPHERE_HOST -User '$VSPHERE_USER' -Password '$VSPHERE_PASS'"
-                        """
-                    }
-                }
-            }
-        }
-
-        stage('Clone VM from Running Machine') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'vsphere-credentials', usernameVariable: 'VSPHERE_USER', passwordVariable: 'VSPHERE_PASS')]) {
-                    script {
-                        sh """
-                        pwsh $SCRIPT_PATH/Deploy-GNS3.ps1 -vCenter '$VSPHERE_HOST' -VMSource '$VM_SOURCE' -VMName '$NEW_VM_NAME' -Datastore '$DATASTORE' -ResourcePool '$RESOURCE_POOL' -VMFolder '$VM_FOLDER' -User '$VSPHERE_USER' -Password '$VSPHERE_PASS'
-                        """
-                    }
-                }
-            }
-        }
-
-        stage('Power On Cloned VM') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'vsphere-credentials', usernameVariable: 'VSPHERE_USER', passwordVariable: 'VSPHERE_PASS')]) {
-                    script {
-                        sh """
-                        pwsh -c "Start-VM -VM '$NEW_VM_NAME' -Confirm:\$false"
+                        pwsh $SCRIPT_PATH/Deploy-GNS3.ps1 -vCenterServer "$VSPHERE_HOST" -vCenterUser "$VSPHERE_USER" -vCenterPass "$VSPHERE_PASS" -VMSource "$VM_SOURCE" -NewVMName "$NEW_VM_NAME" -Datastore "$DATASTORE" -ResourcePool "$RESOURCE_POOL" -VMFolder "$VM_FOLDER"
                         """
                     }
                 }
