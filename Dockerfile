@@ -19,9 +19,6 @@ RUN pwsh -c "Install-Module -Name VMware.PowerCLI -Scope AllUsers -Force -AllowC
 WORKDIR /usr/src/app/
 
 # Copy PowerShell scripts into the container
-COPY Change-RAM.ps1 /usr/src/app/
-COPY Start-VMs.ps1 /usr/src/app/
-COPY Shutdown-VMs.ps1 /usr/src/app/
 COPY Deploy-GNS3.ps1 /usr/src/app/
 
 # Switch back to PowerShell user
