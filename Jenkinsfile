@@ -8,39 +8,28 @@ pipeline {
         DATASTORE = "CITServer-Internal-2"
         RESOURCE_POOL = "/ClusterCIT"
         VM_FOLDER = "/Senior Project Machines"
-        GOVC_PATH = "${WORKSPACE}/govc"  // Store govc in Jenkins workspace
+        SCRIPT_PATH = "/usr/src/app"  // Path where PowerShell scripts are stored
     }
 
     stages {
-        stage('Ensure govc Installed') {
+        stage('Set Up PowerCLI') {
             steps {
                 script {
                     sh """
-                    if [ ! -f "$GOVC_PATH" ]; then
-                        echo "govc not found, installing..."
-                        curl -L https://github.com/vmware/govmomi/releases/latest/download/govc_Linux_x86_64.tar.gz -o govc.tar.gz
-                        tar -xzf govc.tar.gz
-                        chmod +x govc
-                        mv govc $GOVC_PATH
-                        rm govc.tar.gz
-                    else
-                        echo "govc is already installed."
-                    fi
+                    pwsh -c "if (!(Get-Module -ListAvailable VMware.PowerCLI)) { Install-Module -Name VMware.PowerCLI -Scope AllUsers -Force -AllowClobber }"
                     """
                 }
             }
         }
 
-        stage('Verify govc Installation') {
+        stage('Connect to vSphere') {
             steps {
-                script {
-                    sh """
-                    echo "Checking govc version..."
-                    $GOVC_PATH version || {
-                        echo "ERROR: govc is not executable!"
-                        exit 1
+                withCredentials([usernamePassword(credentialsId: 'vsphere-credentials', usernameVariable: 'VSPHERE_USER', passwordVariable: 'VSPHERE_PASS')]) {
+                    script {
+                        sh """
+                        pwsh -c "Connect-VIServer -Server $VSPHERE_HOST -User '$VSPHERE_USER' -Password '$VSPHERE_PASS'"
+                        """
                     }
-                    """
                 }
             }
         }
@@ -50,13 +39,7 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'vsphere-credentials', usernameVariable: 'VSPHERE_USER', passwordVariable: 'VSPHERE_PASS')]) {
                     script {
                         sh """
-                        export GOVC_URL="https://$VSPHERE_USER:$VSPHERE_PASS@$VSPHERE_HOST"
-                        export GOVC_INSECURE=1
-                        echo "Cloning VM..."
-                        $GOVC_PATH vm.clone -vm $VM_SOURCE -ds $DATASTORE -folder $VM_FOLDER -pool $RESOURCE_POOL -on=false -name $NEW_VM_NAME || {
-                            echo "ERROR: VM Clone failed!"
-                            exit 1
-                        }
+                        pwsh $SCRIPT_PATH/Deploy-GNS3.ps1 -vCenter '$VSPHERE_HOST' -VMSource '$VM_SOURCE' -VMName '$NEW_VM_NAME' -Datastore '$DATASTORE' -ResourcePool '$RESOURCE_POOL' -VMFolder '$VM_FOLDER' -User '$VSPHERE_USER' -Password '$VSPHERE_PASS'
                         """
                     }
                 }
@@ -68,13 +51,7 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'vsphere-credentials', usernameVariable: 'VSPHERE_USER', passwordVariable: 'VSPHERE_PASS')]) {
                     script {
                         sh """
-                        export GOVC_URL="https://$VSPHERE_USER:$VSPHERE_PASS@$VSPHERE_HOST"
-                        export GOVC_INSECURE=1
-                        echo "Powering on VM..."
-                        $GOVC_PATH vm.power -on $NEW_VM_NAME || {
-                            echo "ERROR: Powering on VM failed!"
-                            exit 1
-                        }
+                        pwsh -c "Start-VM -VM '$NEW_VM_NAME' -Confirm:\$false"
                         """
                     }
                 }
