@@ -1,81 +1,75 @@
-param(
-    [string]$vCenterServer = $env:VCENTER_SERVER,
-    [string]$vCenterUser = $env:VCENTER_USER,
-    [string]$vCenterPass = $env:VCENTER_PASS,
-    [string]$VMSource = $env:VM_SOURCE,
-    [string]$NewVMName = $env:NEW_VM_NAME,
-    [string]$Datastore = $env:DATASTORE,
-    [string]$ResourcePoolName = $env:RESOURCE_POOL,
-    [string]$VMFolderPath = $env:VM_FOLDER
-)
+pipeline {
+    agent any
 
-# Ignore SSL warnings
-Set-PowerCLIConfiguration -InvalidCertificateAction Ignore -Confirm:$false -Scope User
+    environment {
+        DOCKER_IMAGE_NAME = 'roseaw/gns3deploy'
+        DOCKER_IMAGE_TAG = 'latest'
+        VCENTER_CREDENTIALS_ID = 'ServiceUser'
+        VCENTER_SERVER = 'vcenter.regional.miamioh.edu'
+        VM_SOURCE = 'gns3-main'
+        DATASTORE = 'CITServer-Internal-2'
+        RESOURCE_POOL = 'GNS3 Admin Machines' // ✅ Updated Resource Pool Name
+        VM_FOLDER = 'vm' // Default VM folder
+    }
 
-# 🔗 Connect to vCenter Server
-Write-Host "🔗 Connecting to vCenter Server: $vCenterServer"
-Connect-VIServer -Server $vCenterServer -User $vCenterUser -Password $vCenterPass
+    stages {
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    sh "docker build -t ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG} ."
+                }
+            }
+        }
 
-# 🔍 Debug: List available Resource Pools
-Write-Host "🔍 Checking available Resource Pools..."
-Get-ResourcePool | Select Name, Id
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'roseaw-dockerhub', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                        sh "docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD"
+                        sh "docker push ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
+                    }
+                }
+            }
+        }
 
-# 🔍 Debug: List available Datastores
-Write-Host "🔍 Checking available Datastores..."
-Get-Datastore | Select Name, Id
+        stage('Deploy GNS3 VM') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: env.VCENTER_CREDENTIALS_ID, usernameVariable: 'VCENTER_USER', passwordVariable: 'VCENTER_PASS')]) {
+                        sh """
+                        docker run --rm \
+                            -e VCENTER_SERVER='${env.VCENTER_SERVER}' \
+                            -e VCENTER_USER=\$VCENTER_USER \
+                            -e VCENTER_PASS=\$VCENTER_PASS \
+                            -e VM_SOURCE='${env.VM_SOURCE}' \
+                            -e NEW_VM_NAME='gns3-clone-${env.BUILD_ID}' \
+                            -e DATASTORE='${env.DATASTORE}' \
+                            -e RESOURCE_POOL='${env.RESOURCE_POOL}' \
+                            -e VM_FOLDER='${env.VM_FOLDER}' \
+                            ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG} \
+                            pwsh -File /usr/src/app/Deploy-GNS3.ps1 \
+                                -vCenterServer '${env.VCENTER_SERVER}' \
+                                -vCenterUser \$VCENTER_USER \
+                                -vCenterPass \$VCENTER_PASS \
+                                -VMSource '${env.VM_SOURCE}' \
+                                -NewVMName 'gns3-clone-${env.BUILD_ID}' \
+                                -Datastore '${env.DATASTORE}' \
+                                -ResourcePool '${env.RESOURCE_POOL}' \
+                                -VMFolder '${env.VM_FOLDER}' \
+                                -Verbose
+                        """
+                    }
+                }
+            }
+        }
+    }
 
-# 🔍 Debug: List available Folders
-Write-Host "🔍 Checking available Folders..."
-Get-Folder | Select Name, Id
-
-# ✅ Ensure the Resource Pool exists
-$ResourcePoolObj = Get-ResourcePool | Where-Object { $_.Name -eq $ResourcePoolName }
-if (-not $ResourcePoolObj) {
-    Write-Host "❌ ERROR: Resource Pool '$ResourcePoolName' not found!"
-    Disconnect-VIServer -Server $vCenterServer -Confirm:$false
-    exit 1
+    post {
+        success {
+            slackSend color: "good", message: "✅ GNS3 VM Deployment Successful: ${env.JOB_NAME} ${env.BUILD_NUMBER}"
+        }
+        failure {
+            slackSend color: "danger", message: "❌ GNS3 VM Deployment Failed: ${env.JOB_NAME} ${env.BUILD_NUMBER}"
+        }
+    }
 }
-
-# ✅ Ensure the Datastore exists
-$DatastoreObj = Get-Datastore | Where-Object { $_.Name -eq $Datastore }
-if (-not $DatastoreObj) {
-    Write-Host "❌ ERROR: Datastore '$Datastore' not found! Available Datastores:"
-    Get-Datastore | Select Name
-    Disconnect-VIServer -Server $vCenterServer -Confirm:$false
-    exit 1
-}
-
-# ✅ Ensure the Folder exists
-$VMFolderObj = Get-Folder | Where-Object { $_.Name -eq $VMFolderPath }
-if (-not $VMFolderObj) {
-    Write-Host "❌ ERROR: VM Folder '$VMFolderPath' not found! Available Folders:"
-    Get-Folder | Select Name
-    Disconnect-VIServer -Server $vCenterServer -Confirm:$false
-    exit 1
-}
-
-# 🛠️ Clone the VM
-Write-Host "🛠️ Cloning VM '$VMSource' to '$NewVMName'..."
-try {
-    New-VM -Name $NewVMName -VM $VMSource -Datastore $DatastoreObj -ResourcePool $ResourcePoolObj -Location $VMFolderObj -ErrorAction Stop
-    Write-Host "✅ VM '$NewVMName' cloned successfully."
-} catch {
-    Write-Host "❌ ERROR: Failed to clone VM '$VMSource' to '$NewVMName'. $_"
-    Disconnect-VIServer -Server $vCenterServer -Confirm:$false
-    exit 1
-}
-
-# ⚡ Power on the new VM
-Write-Host "⚡ Powering on VM '$NewVMName'..."
-try {
-    Start-VM -VM $NewVMName -Confirm:$false -ErrorAction Stop
-    Write-Host "✅ VM '$NewVMName' is now powered on."
-} catch {
-    Write-Host "❌ ERROR: Failed to power on VM '$NewVMName'. $_"
-    Disconnect-VIServer -Server $vCenterServer -Confirm:$false
-    exit 1
-}
-
-# 🔌 Disconnect from vCenter
-Write-Host "🔌 Disconnecting from vCenter Server..."
-Disconnect-VIServer -Server $vCenterServer -Confirm:$false
