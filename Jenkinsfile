@@ -2,43 +2,57 @@ pipeline {
     agent any
 
     environment {
-        VSPHERE_HOST = "vcenter.regional.miamioh.edu"
+        DOCKER_IMAGE_NAME = 'roseaw/powercliimage'  // Matches previous pipeline
+        DOCKER_IMAGE_TAG = 'latest'
+        VCENTER_CREDENTIALS_ID = 'ServiceUser'  // Updated to ServiceUser
+        VCENTER_SERVER = 'vcenter.regional.miamioh.edu'  // Updated to correct vCenter server
         VM_SOURCE = "gns3-main"
         NEW_VM_NAME = "gns3-clone-${BUILD_ID}"
         DATASTORE = "CITServer-Internal-2"
         RESOURCE_POOL = "/ClusterCIT"
         VM_FOLDER = "/Senior Project Machines"
-        SCRIPT_PATH = "/usr/src/app"  // Path where PowerShell scripts are stored
     }
 
     stages {
-        stage('Set Up PowerCLI') {
+        stage('Build Docker Image') {
             steps {
                 script {
-                    sh """
-                    pwsh -c "if (!(Get-Module -ListAvailable VMware.PowerCLI)) { Install-Module -Name VMware.PowerCLI -Scope AllUsers -Force -AllowClobber }"
-                    """
+                    sh "docker build -t ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG} ."
                 }
             }
         }
 
-        stage('Clone & Deploy VM') {
+        stage('Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'vsphere-credentials', usernameVariable: 'VSPHERE_USER', passwordVariable: 'VSPHERE_PASS')]) {
-                    script {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'roseaw-dockerhub', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                         sh """
-                        pwsh $SCRIPT_PATH/Deploy-GNS3.ps1 -vCenterServer "$VSPHERE_HOST" -vCenterUser "$VSPHERE_USER" -vCenterPass "$VSPHERE_PASS" -VMSource "$VM_SOURCE" -NewVMName "$NEW_VM_NAME" -Datastore "$DATASTORE" -ResourcePool "$RESOURCE_POOL" -VMFolder "$VM_FOLDER"
+                        docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+                        docker push ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}
                         """
                     }
                 }
             }
         }
 
-        stage('Wait for VM to Boot') {
+        stage('Deploy GNS3 VM') {
             steps {
                 script {
-                    echo "Waiting for VM to become reachable..."
-                    sh "sleep 60"
+                    withCredentials([usernamePassword(credentialsId: env.VCENTER_CREDENTIALS_ID, usernameVariable: 'VCENTER_USER', passwordVariable: 'VCENTER_PASS')]) {
+                        sh """
+                        docker run --rm \
+                            -e VCENTER_SERVER='${env.VCENTER_SERVER}' \
+                            -e VCENTER_USER=\$VCENTER_USER \
+                            -e VCENTER_PASS=\$VCENTER_PASS \
+                            -e VM_SOURCE='${env.VM_SOURCE}' \
+                            -e NEW_VM_NAME='${env.NEW_VM_NAME}' \
+                            -e DATASTORE='${env.DATASTORE}' \
+                            -e RESOURCE_POOL='${env.RESOURCE_POOL}' \
+                            -e VM_FOLDER='${env.VM_FOLDER}' \
+                            ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG} \
+                            pwsh -File /usr/src/app/Deploy-GNS3.ps1 -vCenterServer '${env.VCENTER_SERVER}' -vCenterUser \$VCENTER_USER -vCenterPass \$VCENTER_PASS -VMSource '${env.VM_SOURCE}' -NewVMName '${env.NEW_VM_NAME}' -Datastore '${env.DATASTORE}' -ResourcePool '${env.RESOURCE_POOL}' -VMFolder '${env.VM_FOLDER}' -Verbose
+                        """
+                    }
                 }
             }
         }
@@ -46,10 +60,13 @@ pipeline {
 
     post {
         success {
-            echo "✅ GNS3 VM deployment successful: $NEW_VM_NAME"
+            slackSend color: "good", message: "✅ GNS3 VM Deployment Successful: ${env.JOB_NAME} ${env.BUILD_NUMBER}"
+        }
+        unstable {
+            slackSend color: "warning", message: "⚠️ GNS3 VM Deployment Unstable: ${env.JOB_NAME} ${env.BUILD_NUMBER}"
         }
         failure {
-            echo "❌ Failed to deploy GNS3 VM."
+            slackSend color: "danger", message: "❌ GNS3 VM Deployment Failed: ${env.JOB_NAME} ${env.BUILD_NUMBER}"
         }
     }
 }
