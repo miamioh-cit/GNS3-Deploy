@@ -21,9 +21,8 @@ WORKDIR /usr/src/app/
 # Copy only the Deploy-GNS3 script into the container
 COPY Deploy-GNS3.ps1 /usr/src/app/
 
-# Switch back to PowerShell user
-USER pwsh
+# REMOVE the line that switches to `pwsh` user
+# USER pwsh   <-- REMOVE THIS LINE
 
 # Set PowerShell as the default shell
 CMD ["pwsh"]
-
