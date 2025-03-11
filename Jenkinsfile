@@ -9,8 +9,8 @@ pipeline {
         VM_SOURCE = "gns3-main"
         NEW_VM_NAME = "gns3-clone-${BUILD_ID}"
         DATASTORE = "CITServer-Internal-2"
-        RESOURCE_POOL = "/ClusterCIT"
-        VM_FOLDER = "/Senior Project Machines"
+        RESOURCE_POOL = "Regional/ClusterCIT"
+        VM_FOLDER = "Regional/CIT Prod Server VMs/Senior Project Machines"
     }
 
     stages {
