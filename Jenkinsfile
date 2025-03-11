@@ -2,10 +2,10 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE_NAME = 'roseaw/powercliimage'  // Matches previous pipeline
+        DOCKER_IMAGE_NAME = 'roseaw/gns3deploy'
         DOCKER_IMAGE_TAG = 'latest'
-        VCENTER_CREDENTIALS_ID = 'ServiceUser'  // Updated to ServiceUser
-        VCENTER_SERVER = 'vcenter.regional.miamioh.edu'  // Updated to correct vCenter server
+        VCENTER_CREDENTIALS_ID = 'taylorw8-vsphere'
+        VCENTER_SERVER = 'cit-vc.regionals.miamioh.edu'
         VM_SOURCE = "gns3-main"
         NEW_VM_NAME = "gns3-clone-${BUILD_ID}"
         DATASTORE = "CITServer-Internal-2"
