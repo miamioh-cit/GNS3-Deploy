@@ -1,7 +1,12 @@
 param(
-    [string]$vCenterServer,
-    [string]$vCenterUser,
-    [string]$vCenterPass
+    [string]$vCenterServer = $env:VCENTER_SERVER,
+    [string]$vCenterUser = $env:VCENTER_USER,
+    [string]$vCenterPass = $env:VCENTER_PASS,
+    [string]$VMSource = $env:VM_SOURCE,
+    [string]$NewVMName = $env:NEW_VM_NAME,
+    [string]$Datastore = $env:DATASTORE,
+    [string]$ResourcePoolName = $env:RESOURCE_POOL,
+    [string]$VMFolderPath = $env:VM_FOLDER
 )
 
 # Ignore SSL warnings
@@ -10,13 +15,6 @@ Set-PowerCLIConfiguration -InvalidCertificateAction Ignore -Confirm:$false -Scop
 # Connect to vCenter Server
 Write-Host "🔗 Connecting to vCenter Server: $vCenterServer"
 Connect-VIServer -Server $vCenterServer -User $vCenterUser -Password $vCenterPass
-
-# Define variables
-$VMSource = "gns3-main"
-$NewVMName = "gns3-clone-$((Get-Date).Ticks)"
-$Datastore = "CITServer-Internal-2"
-$ResourcePoolName = "Regional/ClusterCIT"  # Corrected Resource Pool Path
-$VMFolderPath = "Regional/CIT Prod Server VMs/Senior Project Machines"  # Corrected Folder Path
 
 # 🔍 Debug: List available Resource Pools
 Write-Host "🔍 Checking available Resource Pools..."
@@ -27,7 +25,7 @@ Write-Host "🔍 Checking available Folders..."
 Get-Folder | Select Name, Id
 
 # Ensure the resource pool exists
-$ResourcePoolObj = Get-ResourcePool -Location "Regional" | Where-Object { $_.Name -eq "ClusterCIT" }
+$ResourcePoolObj = Get-ResourcePool | Where-Object { $_.Name -eq $ResourcePoolName }
 if (-not $ResourcePoolObj) {
     Write-Host "❌ ERROR: Resource Pool '$ResourcePoolName' not found!"
     Disconnect-VIServer -Server $vCenterServer -Confirm:$false
@@ -35,7 +33,7 @@ if (-not $ResourcePoolObj) {
 }
 
 # Ensure the folder exists
-$VMFolderObj = Get-Folder | Where-Object { $_.Name -eq "Senior Project Machines" -or $_.Id -match "Senior Project Machines" }
+$VMFolderObj = Get-Folder | Where-Object { $_.Name -eq $VMFolderPath }
 if (-not $VMFolderObj) {
     Write-Host "❌ ERROR: VM Folder '$VMFolderPath' not found!"
     Disconnect-VIServer -Server $vCenterServer -Confirm:$false
