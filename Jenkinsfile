@@ -9,7 +9,7 @@ pipeline {
         VM_SOURCE = "gns3-main"
         NEW_VM_NAME = "gns3-clone-${BUILD_ID}"
         DATASTORE = "CITServer-Internal-2"
-        RESOURCE_POOL = "Regional/ClusterCIT"
+        RESOURCE_POOL = "Regional/ClusterCIT/muavesrp03.mcs.miamioh.edu"
         VM_FOLDER = "Regional/CIT Prod Server VMs/Senior Project Machines"
     }
 
