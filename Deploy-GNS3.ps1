@@ -20,9 +20,9 @@ Connect-VIServer -Server $vCenterServer -User $vCenterUser -Password $vCenterPas
 Write-Host "🔍 Checking available Resource Pools..."
 Get-ResourcePool | Select Name, Id
 
-# 🔍 Debug: List available Datastores
-Write-Host "🔍 Checking available Datastores..."
-Get-Datastore | Select Name, Id
+Write-Host "🔍 Looking for datastore named: '$Datastore'"
+Write-Host "🔍 Available datastores:"
+Get-Datastore | ForEach-Object { Write-Host "'$($_.Name)'" }
 
 # 🔍 Debug: List available Folders
 Write-Host "🔍 Checking available Folders..."
