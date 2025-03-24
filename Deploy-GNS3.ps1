@@ -42,15 +42,30 @@ if (-not $ResourcePoolObj) {
     exit 1
 }
 
-# ✅ Ensure the Datastore exists in ClusterCIT
+# ✅ Locate datastore correctly
 $DatastoreTrimmed = $Datastore.Trim()
 Write-Host "🔍 Looking for datastore named: '$DatastoreTrimmed' in cluster '$($cluster.Name)'"
 
-$DatastoreObj = Get-Datastore -Location $cluster | Where-Object { $_.Name -ieq $DatastoreTrimmed }
+# Get all datastores in datacenter
+$allDatastores = Get-Datastore -Location $datacenter
 
+# Try datastores attached to hosts in the cluster
+$clusterHosts = Get-VMHost -Location $cluster
+$datastoresInCluster = $clusterHosts | Get-Datastore | Sort-Object -Property Name -Unique
+
+# Search in cluster's visible datastores
+$DatastoreObj = $datastoresInCluster | Where-Object { $_.Name -ieq $DatastoreTrimmed }
+
+# Fallback to datacenter-wide if not found
 if (-not $DatastoreObj) {
-    Write-Host "❌ ERROR: Datastore '$DatastoreTrimmed' not found in cluster '$($cluster.Name)'! Available:"
-    Get-Datastore -Location $cluster | Select Name | ForEach-Object { Write-Host "➡️ '$($_.Name)'" }
+    Write-Host "⚠️ Datastore not found in cluster hosts. Trying full datacenter scope..."
+    $DatastoreObj = $allDatastores | Where-Object { $_.Name -ieq $DatastoreTrimmed }
+}
+
+# Still not found? Bail out
+if (-not $DatastoreObj) {
+    Write-Host "❌ ERROR: Datastore '$DatastoreTrimmed' not found! Available in datacenter:"
+    $allDatastores | Select Name | ForEach-Object { Write-Host "➡️ '$($_.Name)'" }
     Disconnect-VIServer -Server $vCenterServer -Confirm:$false
     exit 1
 }
