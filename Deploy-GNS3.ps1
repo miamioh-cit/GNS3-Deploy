@@ -16,13 +16,22 @@ Set-PowerCLIConfiguration -InvalidCertificateAction Ignore -Confirm:$false -Scop
 Write-Host "🔗 Connecting to vCenter Server: $vCenterServer"
 Connect-VIServer -Server $vCenterServer -User $vCenterUser -Password $vCenterPass
 
+# ✅ Get and use datacenter context
+$datacenter = Get-Datacenter
+if (-not $datacenter) {
+    Write-Host "❌ ERROR: No datacenter found!"
+    Disconnect-VIServer -Server $vCenterServer -Confirm:$false
+    exit 1
+}
+Write-Host "📍 Using datacenter: $($datacenter.Name)"
+
+# 🔍 List all available datastores in this context
+Write-Host "📦 Available datastores in '$($datacenter.Name)':"
+Get-Datastore -Location $datacenter | ForEach-Object { Write-Host "➡️ '$($_.Name)'" }
+
 # 🔍 Debug: List available Resource Pools
 Write-Host "🔍 Checking available Resource Pools..."
 Get-ResourcePool | Select Name, Id
-
-Write-Host "🔍 Looking for datastore named: '$Datastore'"
-Write-Host "🔍 Available datastores:"
-Get-Datastore | ForEach-Object { Write-Host "'$($_.Name)'" }
 
 # 🔍 Debug: List available Folders
 Write-Host "🔍 Checking available Folders..."
@@ -36,11 +45,12 @@ if (-not $ResourcePoolObj) {
     exit 1
 }
 
-# ✅ Ensure the Datastore exists
-$DatastoreObj = Get-Datastore | Where-Object { $_.Name -eq $Datastore }
+# ✅ Ensure the Datastore exists (case-insensitive, trimmed)
+$DatastoreTrimmed = $Datastore.Trim()
+$DatastoreObj = Get-Datastore -Location $datacenter | Where-Object { $_.Name -ieq $DatastoreTrimmed }
 if (-not $DatastoreObj) {
-    Write-Host "❌ ERROR: Datastore '$Datastore' not found! Available Datastores:"
-    Get-Datastore | Select Name
+    Write-Host "❌ ERROR: Datastore '$DatastoreTrimmed' not found! Available Datastores:"
+    Get-Datastore -Location $datacenter | Select Name
     Disconnect-VIServer -Server $vCenterServer -Confirm:$false
     exit 1
 }
