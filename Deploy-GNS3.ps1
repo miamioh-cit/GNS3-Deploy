@@ -25,15 +25,11 @@ if (-not $datacenter) {
 }
 Write-Host "📍 Using datacenter: $($datacenter.Name)"
 
-# 🔍 List all available datastores in this context
-Write-Host "📦 Available datastores in '$($datacenter.Name)':"
-Get-Datastore -Location $datacenter | ForEach-Object { Write-Host "➡️ '$($_.Name)'" }
-
-# 🔍 Debug: List available Resource Pools
+# 🔍 List all available Resource Pools
 Write-Host "🔍 Checking available Resource Pools..."
 Get-ResourcePool | Select Name, Id
 
-# 🔍 Debug: List available Folders
+# 🔍 List all available Folders
 Write-Host "🔍 Checking available Folders..."
 Get-Folder | Select Name, Id
 
@@ -45,12 +41,24 @@ if (-not $ResourcePoolObj) {
     exit 1
 }
 
-# ✅ Ensure the Datastore exists (case-insensitive, trimmed)
+# ✅ Find the Datastore (with fallback)
 $DatastoreTrimmed = $Datastore.Trim()
-$DatastoreObj = Get-Datastore -Location $datacenter | Where-Object { $_.Name -ieq $DatastoreTrimmed }
+Write-Host "🔍 Looking for datastore named: '$DatastoreTrimmed'"
+
+# Try by cluster first
+$cluster = Get-Cluster
+$DatastoreObj = Get-Datastore -Location $cluster | Where-Object { $_.Name -ieq $DatastoreTrimmed }
+
+# Fallback: global scope
+if (-not $DatastoreObj) {
+    Write-Host "⚠️ Datastore not found in cluster scope. Trying unscoped search..."
+    $DatastoreObj = Get-Datastore | Where-Object { $_.Name -ieq $DatastoreTrimmed }
+}
+
+# Still not found? Error out
 if (-not $DatastoreObj) {
     Write-Host "❌ ERROR: Datastore '$DatastoreTrimmed' not found! Available Datastores:"
-    Get-Datastore -Location $datacenter | Select Name
+    Get-Datastore | Select Name | ForEach-Object { Write-Host "➡️ '$($_.Name)'" }
     Disconnect-VIServer -Server $vCenterServer -Confirm:$false
     exit 1
 }
