@@ -23,8 +23,8 @@ Get-ResourcePool | Select Name
 Write-Host "💽 Available Datastores:"
 Get-Datastore | Select Name
 
-Write-Host "📁 Available Folders:"
-Get-Folder | Select Name
+Write-Host "📁 Available VM Folders:"
+Get-Folder -Type VM | Select Name
 
 # Validate Resource Pool
 $ResourcePoolObj = Get-ResourcePool | Where-Object { $_.Name -eq $ResourcePoolName }
@@ -43,14 +43,17 @@ if (-not $DatastoreObj) {
     exit 1
 }
 
-# Validate Folder
-$VMFolderObj = Get-Folder | Where-Object { $_.Name -eq $VMFolderPath }
+# Validate Folder (ensure only 1 folder is selected and it's a VM folder)
+$VMFolderObj = Get-Folder -Name $VMFolderPath -Type VM | Select-Object -First 1
 if (-not $VMFolderObj) {
     Write-Host "❌ ERROR: Folder '$VMFolderPath' not found! Available:"
-    Get-Folder | Select Name
+    Get-Folder -Type VM | Select Name
     Disconnect-VIServer -Server $vCenterServer -Confirm:$false
     exit 1
 }
+
+# Optional debug
+Write-Host "📁 Selected Folder: $($VMFolderObj.Name)"
 
 # Clone VM
 Write-Host "🛠️ Cloning VM '$VMSource' as '$NewVMName'..."
