@@ -8,7 +8,7 @@ pipeline {
         VCENTER_SERVER = 'vcenter.regional.miamioh.edu'
         VM_SOURCE = 'gns3-main'
         DATASTORE = 'CITServer-Internal-1'
-        RESOURCE_POOL = 'GNS3 Admin Machines' // ✅ Updated Resource Pool Name
+        RESOURCE_POOL = 'GNS3 Machines' // ✅ Updated Resource Pool Name
         VM_FOLDER = 'vm' // Default VM folder
     }
 
